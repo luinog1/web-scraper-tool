@@ -201,9 +201,35 @@ class WebScraper:
         if result:
             return result
 
-        print_error("Sorry, this URL is not supported. yt-dlp may need an update.")
-        print_info("Run: pip install -U yt-dlp")
+        result = self._smd_fallback_download(url)
+        if result:
+            return result
+
+        self._show_supported_platforms()
         return None
+
+    def _smd_fallback_download(self, url):
+        try:
+            import smd
+            loading_animation("Trying Social-Media-Downloader", 2)
+            result = smd.download_youtube_or_tiktok_video(url, self.download_dir)
+            if result:
+                print_success(f"Downloaded via SMD!")
+                return result
+        except ImportError:
+            pass
+        except Exception as e:
+            print_warning(f"SMD failed: {e}")
+        return None
+
+    def _show_supported_platforms(self):
+        print(f"\n{Colors.BOLD}{Colors.YELLOW}  Supported Platforms:{Colors.RESET}")
+        print(f"  {Colors.CYAN}YouTube, Instagram, TikTok, Twitter/X, Facebook{Colors.RESET}")
+        print(f"  {Colors.CYAN}Threads, Pinterest, Reddit, LinkedIn, Snapchat{Colors.RESET}")
+        print(f"  {Colors.CYAN}Likee, DailyMotion, Vimeo, Twitch, Rumble{Colors.RESET}")
+        print(f"  {Colors.CYAN}and 1800+ more via yt-dlp{Colors.RESET}")
+        print(f"\n  {Colors.YELLOW}Tip: Update yt-dlp & try again:{Colors.RESET}")
+        print(f"  {Colors.GREEN}pip install -U yt-dlp{Colors.RESET}")
 
     def _ytdlp_download(self, url, quality):
         output_template = os.path.join(self.download_dir, "%(title).70s.%(ext)s")
@@ -346,6 +372,8 @@ class WebScraper:
             'twitch.tv': ['twitch', 'Twitch'],
             'rumble.com': ['rumble', 'Rumble'],
             't.co': ['twitter', 'Twitter'],
+            'threads.net': ['threads', 'Threads'],
+            'threads.com': ['threads', 'Threads'],
         }
 
         detected = None
@@ -355,8 +383,14 @@ class WebScraper:
                 break
 
         if detected:
-            print_info(f"Detected platform: {detected[1]}")
-            loading_animation(f"Trying {detected[1]} fallback", 2)
+            name = detected[1]
+            print_info(f"Detected platform: {name}")
+            loading_animation(f"Trying {name} fallback", 2)
+
+            if name == 'Threads':
+                result = self._threads_download(url)
+                if result:
+                    return result
 
             cmd = [
                 "yt-dlp", "--no-check-certificates", "--no-warnings",
@@ -379,7 +413,84 @@ class WebScraper:
             except Exception as e:
                 print_warning(f"Fallback error: {e}")
 
+            result = self._scrape_og_media(url)
+            if result:
+                return result
+
         print_info(f"No download method worked for this URL")
+        return None
+
+    def _scrape_og_media(self, url):
+        try:
+            loading_animation("Scraping page for media", 2)
+            html = self.fetch_text(url)
+            if not html:
+                return None
+
+            og_urls = re.findall(
+                r'<meta[^>]*property=[\"\'](?:og:video|og:image|twitter:player|twitter:image)[\"\'][^>]*'
+                r'content=[\"\']([^\"\']+)[\"\']',
+                html, re.IGNORECASE
+            )
+            for u in og_urls:
+                u = u.replace('&amp;', '&')
+                if u.startswith(('http://', 'https://')):
+                    print_success(f"Found media in page meta!")
+                    return self.download_file(u)
+
+            json_ld = re.findall(
+                r'<script[^>]*type=[\"\']application/ld\+json[\"\'][^>]*>(.*?)</script>',
+                html, re.DOTALL
+            )
+            for j in json_ld:
+                try:
+                    data = json.loads(j)
+                    for key in ['contentUrl', 'video', 'image']:
+                        val = data.get(key)
+                        if isinstance(val, str) and val.startswith(('http://', 'https://')):
+                            print_success("Found media in JSON-LD!")
+                            return self.download_file(val)
+                        if isinstance(val, dict):
+                            u = val.get('url', '')
+                            if u.startswith(('http://', 'https://')):
+                                return self.download_file(u)
+                except:
+                    pass
+        except Exception as e:
+            print_warning(f"Scrape failed: {e}")
+        return None
+
+    def _threads_download(self, url):
+        try:
+            loading_animation("Extracting Threads media", 3)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+                              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            }
+            r = requests.get(url, headers=headers, timeout=15)
+            if r.status_code != 200:
+                return None
+
+            og_image = re.search(
+                r'<meta[^>]*property=[\"\']og:image[\"\'][^>]*content=[\"\']([^\"\']+)[\"\']',
+                r.text, re.IGNORECASE
+            )
+            if og_image:
+                img_url = og_image.group(1).replace('&amp;', '&')
+                print_success(f"Found image in Threads post!")
+                return self.download_file(img_url)
+
+            video_urls = re.findall(
+                r'https?://[^\"\'\s<>]*(?:video|cdn)[^\"\'\s<>]*\.(?:mp4|webm)[^\"\'\s<>]*',
+                r.text
+            )
+            if video_urls:
+                vu = video_urls[0].replace('&amp;', '&')
+                print_success("Found video URL in Threads page!")
+                return self.download_file(vu)
+
+        except Exception as e:
+            print_warning(f"Threads error: {e}")
         return None
 
     def download_file(self, url, filename=None):
@@ -621,8 +732,8 @@ def main():
         elif choice == '7':
             print(f"\n{Colors.BOLD}{Colors.GREEN}    🎬 VIDEO DOWNLOAD{Colors.RESET}")
             print(f"    {Colors.CYAN}Instagram | TikTok | YouTube | Twitter/X | Facebook{Colors.RESET}")
-            print(f"    {Colors.CYAN}Pinterest | Reddit | LinkedIn | Snapchat | Likee{Colors.RESET}")
-            print(f"    {Colors.CYAN}DailyMotion | Vimeo | Twitch | Rumble & more{Colors.RESET}")
+            print(f"    {Colors.CYAN}Threads | Pinterest | Reddit | LinkedIn | Snapchat{Colors.RESET}")
+            print(f"    {Colors.CYAN}Likee | DailyMotion | Vimeo | Twitch | Rumble{Colors.RESET}")
             print(f"    {Colors.CYAN}{'-'*50}{Colors.RESET}")
             url = input(f"    {Colors.WHITE}Paste video link: {Colors.RESET}").strip()
             if not url: continue
