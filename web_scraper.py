@@ -462,35 +462,33 @@ class WebScraper:
 
     def _threads_download(self, url):
         try:
-            loading_animation("Extracting Threads media", 3)
+            loading_animation("Extracting Threads media via API", 3)
+            api_url = "https://prenivapi.vercel.app/api/threads"
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
-                              '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
+                              '(KHTML, like Gecko) Chrome/90.0.4430.210 Mobile Safari/537.36'
             }
-            r = requests.get(url, headers=headers, timeout=15)
+            r = requests.get(api_url, params={'url': url}, headers=headers, timeout=20)
             if r.status_code != 200:
+                print_warning(f"Threads API error: {r.status_code}")
                 return None
 
-            og_image = re.search(
-                r'<meta[^>]*property=[\"\']og:image[\"\'][^>]*content=[\"\']([^\"\']+)[\"\']',
-                r.text, re.IGNORECASE
-            )
-            if og_image:
-                img_url = og_image.group(1).replace('&amp;', '&')
-                print_success(f"Found image in Threads post!")
-                return self.download_file(img_url)
+            data = r.json()
+            if not data.get('status') or 'data' not in data:
+                print_warning("Threads API returned no data")
+                return None
 
-            video_urls = re.findall(
-                r'https?://[^\"\'\s<>]*(?:video|cdn)[^\"\'\s<>]*\.(?:mp4|webm)[^\"\'\s<>]*',
-                r.text
-            )
-            if video_urls:
-                vu = video_urls[0].replace('&amp;', '&')
-                print_success("Found video URL in Threads page!")
-                return self.download_file(vu)
+            media_url = data['data'].get('url')
+            if not media_url:
+                print_warning("No media URL found in Threads API response")
+                return None
+
+            media_type = data['data'].get('type', 'video')
+            print_success(f"Found {media_type} via Threads API!")
+            return self.download_file(media_url)
 
         except Exception as e:
-            print_warning(f"Threads error: {e}")
+            print_warning(f"Threads API error: {e}")
         return None
 
     def download_file(self, url, filename=None):
