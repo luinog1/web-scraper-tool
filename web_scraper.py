@@ -188,109 +188,99 @@ class WebScraper:
         print(f"{Colors.WHITE}  Quality: {Colors.GREEN}{quality}{Colors.RESET}")
         print(f"{Colors.CYAN}{'='*55}{Colors.RESET}")
 
-        result = self._ytdlp_download(url, quality)
+        result = self._prenivapi_download(url)
         if result:
             return result
 
-        print_info("Trying alternative methods...")
+        print_info("Trying direct download...")
         result = self._direct_video_download(url)
         if result:
             return result
 
-        result = self._web_fallback_download(url)
-        if result:
-            return result
-
-        result = self._smd_fallback_download(url)
+        result = self._scrape_og_media(url)
         if result:
             return result
 
         self._show_supported_platforms()
         return None
 
-    def _smd_fallback_download(self, url):
-        try:
-            import smd
-            loading_animation("Trying Social-Media-Downloader", 2)
-            result = smd.download_youtube_or_tiktok_video(url, self.download_dir)
-            if result:
-                print_success(f"Downloaded via SMD!")
-                return result
-        except ImportError:
-            pass
-        except Exception as e:
-            print_warning(f"SMD failed: {e}")
-        return None
-
     def _show_supported_platforms(self):
         print(f"\n{Colors.BOLD}{Colors.YELLOW}  Supported Platforms:{Colors.RESET}")
         print(f"  {Colors.CYAN}YouTube, Instagram, TikTok, Twitter/X, Facebook{Colors.RESET}")
-        print(f"  {Colors.CYAN}Threads, Pinterest, Reddit, LinkedIn, Snapchat{Colors.RESET}")
-        print(f"  {Colors.CYAN}Likee, DailyMotion, Vimeo, Twitch, Rumble{Colors.RESET}")
-        print(f"  {Colors.CYAN}and 1800+ more via yt-dlp{Colors.RESET}")
-        print(f"\n  {Colors.YELLOW}Tip: Update yt-dlp & try again:{Colors.RESET}")
-        print(f"  {Colors.GREEN}pip install -U yt-dlp{Colors.RESET}")
+        print(f"  {Colors.CYAN}Threads, Pinterest, Spotify, Douyin, Bluesky{Colors.RESET}")
+        print(f"  {Colors.CYAN}CapCut, RedNote, Kuaishou, Weibo, Apple Music{Colors.RESET}")
 
-    def _ytdlp_download(self, url, quality):
-        output_template = os.path.join(self.download_dir, "%(title).70s.%(ext)s")
+    def _prenivapi_download(self, url):
+        api_endpoints = {
+            'tiktok.com': 'tiktok', 'vm.tiktok.com': 'tiktok',
+            'facebook.com': 'facebookv1', 'fb.watch': 'facebookv1', 'fb.com': 'facebookv1',
+            'instagram.com': 'igdl', 'instagr.am': 'igdl',
+            'twitter.com': 'twitter', 'x.com': 'twitter', 't.co': 'twitter',
+            'youtube.com': 'youtube', 'youtu.be': 'youtube',
+            'threads.com': 'threads', 'threads.net': 'threads',
+            'pinterest.com': 'pinterest', 'pin.it': 'pinterest',
+            'douyin.com': 'douyin',
+            'spotify.com': 'spotify',
+            'music.apple.com': 'applemusic',
+            'capcut.com': 'capcut', 'capcut.net': 'capcut',
+            'bluesky.com': 'bluesky', 'bsky.app': 'bluesky',
+            'xiaohongshu.com': 'rednote', 'rednote.com': 'rednote',
+            'kuaishou.com': 'kuaishou',
+            'weibo.com': 'weibo',
+        }
 
-        formats_to_try = ["best", "bestvideo+bestaudio/best", "worst"]
-        if quality == "720":
-            formats_to_try = ["bestvideo[height<=720]+bestaudio/best[height<=720]", "best[height<=720]", "best"]
-        elif quality == "480":
-            formats_to_try = ["bestvideo[height<=480]+bestaudio/best[height<=480]", "best[height<=480]", "best"]
-        elif quality == "360":
-            formats_to_try = ["bestvideo[height<=360]+bestaudio/best[height<=360]", "best[height<=360]", "best"]
+        detected = None
+        for domain, api_name in api_endpoints.items():
+            if domain in url.lower():
+                detected = api_name
+                break
 
-        extra_args = ["--no-check-certificates", "--no-warnings", "-o", output_template, "--no-overwrites"]
-        cookie = self._get_cookie_file()
-        if cookie:
-            extra_args += ["--cookies", cookie]
+        if not detected:
+            return None
 
-        for fmt in formats_to_try:
-            cmd = ["yt-dlp", "-f", fmt] + extra_args + ["--print", "after_move:filepath", url]
-            try:
-                loading_animation(f"Trying format: {fmt[:40]}", 1)
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+        try:
+            loading_animation(f"Fetching from {detected} API", 2)
+            api_url = f"https://prenivapi.vercel.app/api/{detected}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
+                              '(KHTML, like Gecko) Chrome/90.0.4430.210 Mobile Safari/537.36'
+            }
+            r = self.session.get(api_url, params={'url': url}, headers=headers, timeout=25)
 
-                if result.returncode == 0:
-                    filepath = result.stdout.strip().split('\n')[-1]
-                    if filepath and os.path.exists(filepath):
-                        size = os.path.getsize(filepath)
-                        sz = f"{size/(1024*1024):.1f} MB" if size > 1024*1024 else f"{size/1024:.1f} KB"
-                        print_success(f"Downloaded: {filepath} ({sz})")
-                        return filepath
-                    files = sorted(os.listdir(self.download_dir),
-                                   key=lambda x: os.path.getmtime(os.path.join(self.download_dir, x)), reverse=True)
-                    if files:
-                        latest = os.path.join(self.download_dir, files[0])
-                        if os.path.getmtime(latest) > time.time() - 60:
-                            size = os.path.getsize(latest)
-                            print_success(f"Found: {latest} ({size/(1024*1024):.1f} MB)")
-                            return latest
-                else:
-                    err = (result.stderr or "")[:300]
-                    if "unsupported url" in err.lower():
-                        print_error(f"Unsupported URL by yt-dlp")
-                        return None
-                    if "format" in err.lower():
-                        print_warning(f"Format not available, trying next...")
-                        continue
-                    print_error(f"yt-dlp error: {err[:150]}")
-                    continue
+            if r.status_code != 200:
+                print_warning(f"API returned {r.status_code}")
+                return None
 
-            except subprocess.TimeoutExpired:
-                print_warning("Timeout, trying next...")
-                continue
-            except FileNotFoundError:
-                print_info("Installing yt-dlp...")
-                subprocess.run(["pip", "install", "yt-dlp"], capture_output=True)
-                return self._ytdlp_download(url, quality)
-            except Exception as e:
-                print_error(f"yt-dlp failed: {e}")
-                continue
+            data = r.json()
+            if not data.get('status'):
+                print_warning(f"API error: {data.get('msg', 'unknown')}")
+                return None
 
-        return None
+            media_data = data.get('data', {})
+
+            download_url = (media_data.get('url') or
+                            media_data.get('download'))
+
+            if not download_url and 'downloads' in media_data:
+                dl = media_data['downloads']
+                if isinstance(dl, dict):
+                    for key in ['video', 'audio']:
+                        items = dl.get(key, [])
+                        if items and isinstance(items, list) and len(items) > 0:
+                            download_url = items[0].get('url')
+                            if download_url:
+                                break
+
+            if not download_url:
+                print_warning("No download URL in API response")
+                return None
+
+            print_success(f"Found media via API!")
+            return self.download_file(download_url)
+
+        except Exception as e:
+            print_warning(f"API failed: {e}")
+            return None
 
     def _direct_video_download(self, url):
         try:
