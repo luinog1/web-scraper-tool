@@ -408,7 +408,11 @@ def main():
 
     while True:
         print_menu()
-        choice = input(f"\n{Colors.YELLOW}    Select (1-10): {Colors.RESET}").strip()
+        try:
+            choice = input(f"\n{Colors.YELLOW}    Select (1-10): {Colors.RESET}").strip()
+        except EOFError:
+            print(f"\n{Colors.RED}{Colors.BOLD}    ❌ Input error! Exiting...{Colors.RESET}")
+            break
 
         if choice == '10':
             print(f"\n{Colors.BOLD}{Colors.CYAN}    ╔══════════════════════════════════╗")
