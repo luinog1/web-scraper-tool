@@ -5,7 +5,6 @@ import csv
 import time
 import os
 import re
-import subprocess
 import sys
 import random
 from urllib.parse import urlparse, unquote
@@ -338,77 +337,7 @@ class WebScraper:
             print_error(f"Direct download failed: {e}")
         return None
 
-    def _web_fallback_download(self, url):
-        platforms = {
-            'instagram.com': ['instagram', 'Instagram'],
-            'tiktok.com': ['tiktok', 'TikTok'],
-            'vm.tiktok.com': ['tiktok', 'TikTok'],
-            'facebook.com': ['facebook', 'Facebook'],
-            'fb.watch': ['facebook', 'Facebook'],
-            'twitter.com': ['twitter', 'Twitter'],
-            'x.com': ['twitter', 'Twitter'],
-            'youtube.com': ['youtube', 'YouTube'],
-            'youtu.be': ['youtube', 'YouTube'],
-            'pinterest.com': ['pinterest', 'Pinterest'],
-            'pin.it': ['pinterest', 'Pinterest'],
-            'reddit.com': ['reddit', 'Reddit'],
-            'redd.it': ['reddit', 'Reddit'],
-            'linkedin.com': ['linkedin', 'LinkedIn'],
-            'snapchat.com': ['snapchat', 'Snapchat'],
-            'likee.com': ['likee', 'Likee'],
-            'dailymotion.com': ['dailymotion', 'DailyMotion'],
-            'dai.ly': ['dailymotion', 'DailyMotion'],
-            'vimeo.com': ['vimeo', 'Vimeo'],
-            'twitch.tv': ['twitch', 'Twitch'],
-            'rumble.com': ['rumble', 'Rumble'],
-            't.co': ['twitter', 'Twitter'],
-            'threads.net': ['threads', 'Threads'],
-            'threads.com': ['threads', 'Threads'],
-        }
 
-        detected = None
-        for domain, info in platforms.items():
-            if domain in url.lower():
-                detected = info
-                break
-
-        if detected:
-            name = detected[1]
-            print_info(f"Detected platform: {name}")
-            loading_animation(f"Trying {name} fallback", 2)
-
-            if name == 'Threads':
-                result = self._threads_download(url)
-                if result:
-                    return result
-
-            cmd = [
-                "yt-dlp", "--no-check-certificates", "--no-warnings",
-                "--ignore-errors", "--force-ipv4",
-                "-f", "best", "-o", os.path.join(self.download_dir, "%(title).70s.%(ext)s"),
-                "--no-overwrites", "--print", "after_move:filepath", url
-            ]
-            try:
-                cookie = self._get_cookie_file()
-                if cookie:
-                    cmd.extend(["--cookies", cookie])
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-                if result.returncode == 0:
-                    filepath = result.stdout.strip().split('\n')[-1]
-                    if filepath and os.path.exists(filepath):
-                        print_success(f"Downloaded: {filepath}")
-                        return filepath
-                else:
-                    print_warning(f"Fallback failed: {(result.stderr or '')[:100]}")
-            except Exception as e:
-                print_warning(f"Fallback error: {e}")
-
-            result = self._scrape_og_media(url)
-            if result:
-                return result
-
-        print_info(f"No download method worked for this URL")
-        return None
 
     def _scrape_og_media(self, url):
         try:
@@ -448,37 +377,6 @@ class WebScraper:
                     pass
         except Exception as e:
             print_warning(f"Scrape failed: {e}")
-        return None
-
-    def _threads_download(self, url):
-        try:
-            loading_animation("Extracting Threads media via API", 3)
-            api_url = "https://prenivapi.vercel.app/api/threads"
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36 '
-                              '(KHTML, like Gecko) Chrome/90.0.4430.210 Mobile Safari/537.36'
-            }
-            r = requests.get(api_url, params={'url': url}, headers=headers, timeout=20)
-            if r.status_code != 200:
-                print_warning(f"Threads API error: {r.status_code}")
-                return None
-
-            data = r.json()
-            if not data.get('status') or 'data' not in data:
-                print_warning("Threads API returned no data")
-                return None
-
-            media_url = data['data'].get('url')
-            if not media_url:
-                print_warning("No media URL found in Threads API response")
-                return None
-
-            media_type = data['data'].get('type', 'video')
-            print_success(f"Found {media_type} via Threads API!")
-            return self.download_file(media_url)
-
-        except Exception as e:
-            print_warning(f"Threads API error: {e}")
         return None
 
     def download_file(self, url, filename=None):
