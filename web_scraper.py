@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import random
+import subprocess
 from urllib.parse import urlparse, unquote
 from colorama import init, Fore, Back, Style
 
@@ -191,12 +192,22 @@ class WebScraper:
         if result:
             return result
 
+        print_info("Trying yt-dlp...")
+        result = self._ytdlp_download(url, quality)
+        if result:
+            return result
+
         print_info("Trying direct download...")
         result = self._direct_video_download(url)
         if result:
             return result
 
         result = self._scrape_og_media(url)
+        if result:
+            return result
+
+        print_info("Trying imginn bypass...")
+        result = self._imginn_download(url)
         if result:
             return result
 
@@ -208,6 +219,58 @@ class WebScraper:
         print(f"  {Colors.CYAN}YouTube, Instagram, TikTok, Twitter/X, Facebook{Colors.RESET}")
         print(f"  {Colors.CYAN}Threads, Pinterest, Spotify, Douyin, Bluesky{Colors.RESET}")
         print(f"  {Colors.CYAN}CapCut, RedNote, Kuaishou, Weibo, Apple Music{Colors.RESET}")
+
+    def _ytdlp_download(self, url, quality="best"):
+        try:
+            loading_animation("Processing with yt-dlp", 2)
+            output_template = os.path.join(self.download_dir, "%(title)s.%(ext)s")
+            quality_map = {
+                'best': 'bestvideo+bestaudio/best',
+                '720': 'bestvideo[height<=720]+bestaudio/best[height<=720]',
+                '480': 'bestvideo[height<=480]+bestaudio/best[height<=480]',
+                '360': 'bestvideo[height<=360]+bestaudio/best[height<=360]',
+            }
+            fmt = quality_map.get(quality, 'bestvideo+bestaudio/best')
+
+            cmd = [
+                'yt-dlp',
+                '-f', fmt,
+                '-o', output_template,
+                '--no-playlist',
+                '--print', 'filename',
+                '--no-warnings',
+            ]
+            cookie_file = self._get_cookie_file()
+            if cookie_file:
+                cmd += ['--cookies', cookie_file]
+            cmd.append(url)
+
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+            if result.returncode != 0:
+                print_warning(f"yt-dlp failed: {result.stderr.strip()}")
+                return None
+
+            filepath = result.stdout.strip().split('\n')[-1]
+            if filepath and os.path.exists(filepath):
+                size = os.path.getsize(filepath)
+                if size > 1024*1024: sz = f"{size/(1024*1024):.1f} MB"
+                elif size > 1024: sz = f"{size/1024:.1f} KB"
+                else: sz = f"{size} B"
+                print_success(f"Saved: {filepath} ({sz})")
+                return filepath
+
+            print_warning("yt-dlp completed but file not found")
+            return None
+
+        except FileNotFoundError:
+            print_warning("yt-dlp not installed! Install with: pkg install yt-dlp")
+            return None
+        except subprocess.TimeoutExpired:
+            print_warning("yt-dlp timed out (120s)")
+            return None
+        except Exception as e:
+            print_warning(f"yt-dlp error: {e}")
+            return None
 
     def _prenivapi_download(self, url):
         api_endpoints = {
@@ -378,6 +441,38 @@ class WebScraper:
         except Exception as e:
             print_warning(f"Scrape failed: {e}")
         return None
+
+    def _imginn_download(self, url):
+        if 'instagram.com' not in url and 'instagr.am' not in url:
+            return None
+        try:
+            shortcode_match = re.search(r'/(?:p|reel|tv)/([A-Za-z0-9_-]+)', url)
+            if not shortcode_match:
+                return None
+            shortcode = shortcode_match.group(1)
+            imginn_url = f"https://imginn.com/p/{shortcode}/"
+            loading_animation(f"Bypassing via imginn.com", 2)
+            html = self.fetch_text(imginn_url)
+            if not html:
+                return None
+
+            patterns = [
+                r'<a\s+download[^>]*\s+href=["\']([^"\']+\.mp4[^"\']*)["\']',
+                r'data-src=["\']([^"\']+\.mp4[^"\']*)["\']',
+                r'<video[^>]+src=["\']([^"\']+\.mp4[^"\']*)["\']',
+            ]
+            for p in patterns:
+                matches = re.findall(p, html)
+                if matches:
+                    video_url = matches[0].replace('&amp;', '&').replace('&#38;', '&')
+                    if video_url.startswith(('http://', 'https://')):
+                        print_success("Found video via imginn bypass!")
+                        return self.download_file(video_url)
+            print_warning("imginn page parsed but no video found")
+            return None
+        except Exception as e:
+            print_warning(f"imginn bypass failed: {e}")
+            return None
 
     def download_file(self, url, filename=None):
         if not url.startswith(('http://', 'https://')):
