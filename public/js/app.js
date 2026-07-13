@@ -28,27 +28,30 @@ function renderInputs(op) {
     let html = '';
     switch(op) {
         case 'hashtag_search':
+        case 'web_search':
             html = `
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Hashtag ou Termo de Busca</label>
                     <input type="text" id="searchQuery" placeholder="Ex: #tecnologia, python, memes" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
-                    <p class="text-xs text-gray-500 mt-1">Busca direto na web sem precisar de URL.</p>
+                    <p class="text-xs text-gray-500 mt-1">Busca direto na web. Use # para hashtags.</p>
                 </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Filtrar por Rede Social</label>
+                    <select id="platformFilter" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                        <option value="all">🌐 Web (Todos os sites)</option>
+                        <option value="tiktok">🎵 TikTok (Extrai vídeos via Apify)</option>
+                        <option value="instagram">📸 Instagram (Busca no Google)</option>
+                        <option value="youtube">▶️ YouTube (Busca no Google)</option>
+                        <option value="twitter">🐦 Twitter/X (Busca no Google)</option>
+                        <option value="facebook">👤 Facebook (Busca no Google)</option>
+                    </select>
+                    <p class="text-xs text-gray-500 mt-1">Se selecionar TikTok, o sistema usará o Apify para extrair os links diretos dos vídeos.</p>
+                </div>
+                
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Número de Resultados</label>
                     <input type="number" id="searchNum" value="15" min="1" max="50" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
-                </div>
-            `;
-            break;
-        case 'web_search':
-            html = `
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Termo de Pesquisa</label>
-                    <input type="text" id="searchQuery" placeholder="Ex: python tutorial" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Número de Resultados</label>
-                    <input type="number" id="searchNum" value="10" min="1" max="50" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
                 </div>
             `;
             break;
@@ -82,6 +85,7 @@ function renderInputs(op) {
                         <option value="360">360p (Baixa)</option>
                     </select>
                 </div>
+                <p class="text-xs text-yellow-500 bg-yellow-900/30 p-2 rounded">Nota: Para TikTok, o sistema usará o Apify automaticamente para não tomar bloqueio. Para YouTube/Twitter, usará yt-dlp.</p>
             `;
             break;
         case 'list_downloads':
@@ -136,9 +140,11 @@ scrapeBtn.addEventListener('click', async () => {
         if (op === 'hashtag_search' || op === 'web_search') {
             const q = document.getElementById('searchQuery').value;
             const num = document.getElementById('searchNum').value;
+            const platform = document.getElementById('platformFilter').value;
             if (!q) throw new Error("Insira um termo de pesquisa.");
-            url += `?q=${encodeURIComponent(q)}&num=${num}`;
-            addLog(`Pesquisando na web por: ${q}`);
+            
+            url += `?q=${encodeURIComponent(q)}&num=${num}&platform=${platform}`;
+            addLog(`Pesquisando por: ${q} (Filtro selecionado: ${platform})`);
             
         } else if (op === 'text_scrape' || op === 'links_scrape' || op === 'images_scrape') {
             const targetUrl = document.getElementById('targetUrl').value;
