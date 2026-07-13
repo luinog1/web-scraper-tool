@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# Copiar código fonte
+# Copiar código fonte e arquivos públicos
 COPY . .
 
 # Criar diretório de downloads dentro do container
