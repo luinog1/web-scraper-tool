@@ -33,7 +33,6 @@ function renderInputs(op) {
                 <div>
                     <label class="block text-sm font-medium text-gray-400 mb-2">Hashtag ou Termo de Busca</label>
                     <input type="text" id="searchQuery" placeholder="Ex: #tecnologia, python, memes" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
-                    <p class="text-xs text-gray-500 mt-1">Busca direto na web. Use # para hashtags.</p>
                 </div>
                 
                 <div>
@@ -46,7 +45,15 @@ function renderInputs(op) {
                         <option value="twitter">🐦 Twitter/X (Busca no Google)</option>
                         <option value="facebook">👤 Facebook (Busca no Google)</option>
                     </select>
-                    <p class="text-xs text-gray-500 mt-1">Se selecionar TikTok, o sistema usará o Apify para extrair os links diretos dos vídeos.</p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Ordenar Resultados (Apenas TikTok)</label>
+                    <select id="sortBy" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                        <option value="relevance">⭐ Relevância (Padrão do TikTok)</option>
+                        <option value="views">👀 Maior Número de Visualizações</option>
+                        <option value="likes">❤️ Maior Número de Curtidas</option>
+                    </select>
                 </div>
                 
                 <div>
@@ -85,7 +92,7 @@ function renderInputs(op) {
                         <option value="360">360p (Baixa)</option>
                     </select>
                 </div>
-                <p class="text-xs text-yellow-500 bg-yellow-900/30 p-2 rounded">Nota: Para TikTok, o sistema usará o Apify automaticamente para não tomar bloqueio. Para YouTube/Twitter, usará yt-dlp.</p>
+                <p class="text-xs text-yellow-500 bg-yellow-900/30 p-2 rounded">Nota: Para TikTok, o sistema usará o Apify automaticamente. Para YouTube/Twitter, usará yt-dlp.</p>
             `;
             break;
         case 'list_downloads':
@@ -141,10 +148,12 @@ scrapeBtn.addEventListener('click', async () => {
             const q = document.getElementById('searchQuery').value;
             const num = document.getElementById('searchNum').value;
             const platform = document.getElementById('platformFilter').value;
+            const sort_by = document.getElementById('sortBy').value;
+            
             if (!q) throw new Error("Insira um termo de pesquisa.");
             
-            url += `?q=${encodeURIComponent(q)}&num=${num}&platform=${platform}`;
-            addLog(`Pesquisando por: ${q} (Filtro selecionado: ${platform})`);
+            url += `?q=${encodeURIComponent(q)}&num=${num}&platform=${platform}&sort_by=${sort_by}`;
+            addLog(`Pesquisando por: ${q} (Filtro: ${platform}, Ordenação: ${sort_by})`);
             
         } else if (op === 'text_scrape' || op === 'links_scrape' || op === 'images_scrape') {
             const targetUrl = document.getElementById('targetUrl').value;
@@ -204,6 +213,6 @@ copyBtn.addEventListener('click', () => {
     setTimeout(() => copyBtn.innerText = 'Copiar JSON', 2000);
 });
 
-// Inicializa a UI com os campos da primeira opção
+// Inicializa a UI
 operationSelect.addEventListener('change', (e) => renderInputs(e.target.value));
 renderInputs('hashtag_search');
