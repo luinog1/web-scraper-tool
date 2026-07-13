@@ -57,28 +57,17 @@ def fetch_html(url: str) -> str:
     return r.text
 
 # ─── Endpoints da API ──────────────────────────────────────────────────────────
-@app.get("/api")
-def api_root():
-    return {
-        "message": "Web Scraper API is running.",
-        "endpoints": [
-            "GET  /api/search?q=python+tutorial",
-            "POST /api/scrape/text   - extrai texto por CSS selector",
-            "POST /api/scrape/links  - extrai links por CSS selector",
-            "POST /api/scrape/images - extrai imagens por CSS selector",
-            "POST /api/video         - extrai URL de download de vídeo",
-            "GET  /api/downloads     - lista ficheiros descarregados",
-        ],
-    }
-
 @app.get("/api/search")
 def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 10):
-    """Pesquisa no DuckDuckGo e devolve os resultados."""
+    """Pesquisa no DuckDuckGo (fallback para Bing) e devolve os resultados."""
+    results = []
+    
+    # TENTATIVA 1: DuckDuckGo
     try:
-        url = f"https://html.duckduckgo.com/html/?q={requests.utils.quote(q)}"
-        r = requests.get(url, headers=HEADERS, timeout=15)
+        url = f"https://duckduckgo.com/html/?q={requests.utils.quote(q)}"
+        r = requests.get(url, headers=HEADERS, timeout=10)
+        r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
-        results = []
         for item in soup.select("div.result")[:num]:
             title_el = item.select_one("a.result__a")
             desc_el = item.select_one("a.result__snippet")
@@ -88,115 +77,32 @@ def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 
                     "url": title_el.get("href", ""),
                     "description": desc_el.get_text(strip=True) if desc_el else "",
                 })
-        return {"query": q, "count": len(results), "results": results}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception as ddg_error:
+        print(f"DuckDuckGo falhou: {ddg_error}. Tentando Bing...")
+    
+    # TENTATIVA 2: Bing (se DuckDuckGo falhar ou não retornar nada)
+    if not results:
+        try:
+            url = f"https://www.bing.com/search?q={requests.utils.quote(q)}"
+            r = requests.get(url, headers=HEADERS, timeout=10)
+            r.raise_for_status()
+            soup = BeautifulSoup(r.text, "html.parser")
+            for item in soup.select("li.b_algo")[:num]:
+                title_el = item.select_one("h2 a")
+                desc_el = item.select_one(".b_caption p")
+                if title_el:
+                    results.append({
+                        "title": title_el.get_text(strip=True),
+                        "url": title_el.get("href", ""),
+                        "description": desc_el.get_text(strip=True) if desc_el else "",
+                    })
+        except Exception as bing_error:
+            raise HTTPException(status_code=500, detail=f"Erro no DuckDuckGo e no Bing: {str(bing_error)}")
 
-@app.post("/api/scrape/text")
-def scrape_text(req: ScrapeRequest):
-    """Extrai texto de uma página usando um CSS selector."""
-    try:
-        html = fetch_html(clean_url(req.url))
-        soup = BeautifulSoup(html, "html.parser")
-        elements = [el.get_text(strip=True) for el in soup.select(req.selector)]
-        return {"url": req.url, "selector": req.selector, "count": len(elements), "data": elements}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    if not results:
+        raise HTTPException(status_code=404, detail="Nenhum resultado encontrado em nenhum motor de busca.")
 
-@app.post("/api/scrape/links")
-def scrape_links(req: ScrapeRequest):
-    """Extrai links de uma página usando um CSS selector."""
-    try:
-        html = fetch_html(clean_url(req.url))
-        soup = BeautifulSoup(html, "html.parser")
-        selector = req.selector if req.selector != "p" else "a"
-        links = [
-            {"text": a.get_text(strip=True), "href": a.get("href", "")}
-            for a in soup.select(selector)
-        ]
-        return {"url": req.url, "selector": selector, "count": len(links), "data": links}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/scrape/images")
-def scrape_images(req: ScrapeRequest):
-    """Extrai imagens de uma página usando um CSS selector."""
-    try:
-        html = fetch_html(clean_url(req.url))
-        soup = BeautifulSoup(html, "html.parser")
-        selector = req.selector if req.selector != "p" else "img"
-        images = [
-            {"src": img.get("src", ""), "alt": img.get("alt", "")}
-            for img in soup.select(selector)
-        ]
-        return {"url": req.url, "selector": selector, "count": len(images), "data": images}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/video")
-def get_video_info(req: VideoRequest):
-    """
-    Extrai a URL de download do vídeo usando yt-dlp (sem descarregar o ficheiro).
-    Suporta: YouTube, TikTok, Instagram, Twitter/X, Facebook, e muito mais.
-    """
-    url = clean_url(req.url)
-    quality_map = {
-        "best": "bestvideo+bestaudio/best",
-        "720": "bestvideo[height<=720]+bestaudio/best[height<=720]",
-        "480": "bestvideo[height<=480]+bestaudio/best[height<=480]",
-        "360": "bestvideo[height<=360]+bestaudio/best[height<=360]",
-    }
-    fmt = quality_map.get(req.quality, "bestvideo+bestaudio/best")
-    try:
-        cmd = [
-            "yt-dlp",
-            "--get-url",
-            "--no-playlist",
-            "--no-warnings",
-            "-f", fmt,
-            url,
-        ]
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        if result.returncode != 0:
-            # Fallback: tentar obter metadados em JSON
-            cmd_json = ["yt-dlp", "--dump-json", "--no-playlist", "--no-warnings", url]
-            result_json = subprocess.run(cmd_json, capture_output=True, text=True, timeout=60)
-            if result_json.returncode == 0:
-                info = json.loads(result_json.stdout)
-                return {
-                    "status": "success",
-                    "title": info.get("title"),
-                    "uploader": info.get("uploader"),
-                    "duration": info.get("duration"),
-                    "thumbnail": info.get("thumbnail"),
-                    "download_url": info.get("url"),
-                    "formats_available": len(info.get("formats", [])),
-                }
-            raise HTTPException(status_code=400, detail=result.stderr.strip() or "yt-dlp falhou")
-        download_urls = [u for u in result.stdout.strip().split("\n") if u.startswith("http")]
-        return {
-            "status": "success",
-            "source_url": url,
-            "quality": req.quality,
-            "download_urls": download_urls,
-        }
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=504, detail="Timeout ao extrair vídeo (60s)")
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/downloads")
-def list_downloads():
-    """Lista os ficheiros presentes no diretório de downloads do container."""
-    try:
-        files = []
-        for f in os.listdir(DOWNLOAD_DIR):
-            path = os.path.join(DOWNLOAD_DIR, f)
-            size = os.path.getsize(path)
-            files.append({"name": f, "size_bytes": size, "size_mb": round(size / 1024 / 1024, 2)})
-        return {"download_dir": DOWNLOAD_DIR, "count": len(files), "files": files}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return {"query": q, "count": len(results), "results": results, "engine": "Bing (Fallback)" if len(results) > 0 else "DuckDuckGo"}
 
 # ─── Servir interface frontend ─────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
