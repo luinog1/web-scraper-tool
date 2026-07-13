@@ -3,91 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Scraper Tool - UI</title>
-    <!-- Tailwind CSS via CDN -->
+    <title>Web Scraper Tool - Interface</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { font-family: 'Inter', sans-serif; }
-        .fade-in { animation: fadeIn 0.3s ease-in-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-    </style>
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
-<body class="bg-gray-900 text-gray-200">
-    
+<body class="bg-gray-900 text-gray-200 min-h-screen">
     <!-- Header -->
     <header class="bg-gray-800 border-b border-gray-700 p-4 shadow-md">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold text-indigo-400">
-                Web Scraper <span class="text-gray-400 text-lg font-normal">Tool UI</span>
+                Web Scraper <span class="text-gray-400 text-lg font-normal">Tool</span>
             </h1>
-            <a href="https://github.com/luinog1/web-scraper-tool" target="_blank" class="text-sm text-gray-400 hover:text-indigo-400 transition-colors">
-                Ver Repositório
-            </a>
+            <div class="flex space-x-4">
+                <a href="https://github.com/luinog1/web-scraper-tool" target="_blank" class="text-sm text-gray-400 hover:text-indigo-400 transition-colors">
+                    Ver Repositório
+                </a>
+                <a href="/docs" target="_blank" class="text-sm text-gray-400 hover:text-indigo-400 transition-colors">
+                    API Docs
+                </a>
+            </div>
         </div>
     </header>
 
     <!-- Main Content -->
     <main class="max-w-7xl w-full mx-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
         
-        <!-- Coluna Esquerda: Configuração -->
+        <!-- Coluna Esquerda: Configuração Dinâmica -->
         <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg">
-            <h2 class="text-xl font-semibold mb-6 text-gray-100">Configuração do Scraping</h2>
+            <h2 class="text-xl font-semibold mb-6 text-gray-100">📋 Menu de Operações</h2>
             
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-400 mb-2">URL Alvo</label>
-                <input
-                    type="url"
-                    id="urlInput"
-                    placeholder="https://exemplo.com"
-                    class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500 focus:outline-none"
-                />
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-400 mb-2">Selecione a Operação</label>
+                <select id="operationSelect" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                    <option value="hashtag_search">🔍 Buscar por Hashtag/Texto (Web)</option>
+                    <option value="web_search">1. 🔍 Web Search (DuckDuckGo)</option>
+                    <option value="text_scrape">4. 📝 Text Scrape (Extrair Texto)</option>
+                    <option value="links_scrape">5. 🔗 Links Scrape (Extrair Links)</option>
+                    <option value="images_scrape">6. 🖼️ Images Scrape (Extrair Imagens)</option>
+                    <option value="video_download">7. 🎬 Video Download (YouTube, Insta, etc)</option>
+                    <option value="list_downloads">8. 📥 List Downloads (Arquivos no servidor)</option>
+                </select>
             </div>
 
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-400 mb-2">Seletores CSS (Chave -> Seletor)</label>
-                <div id="selectorsContainer" class="space-y-2">
-                    <!-- Seletores serão adicionados aqui via JS -->
-                </div>
-                <button 
-                    id="addSelectorBtn"
-                    class="mt-3 text-sm text-indigo-400 hover:text-indigo-300 font-medium"
-                >+ Adicionar Seletor</button>
+            <div id="dynamicInputs" class="space-y-4 mb-6">
+                <!-- Os campos de entrada aparecerão aqui dinamicamente via JS -->
             </div>
 
-            <div class="grid grid-cols-2 gap-4 mb-6">
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Profundidade</label>
-                    <input
-                        type="number"
-                        id="depthInput"
-                        min="1"
-                        max="5"
-                        value="1"
-                        class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500"
-                    />
-                </div>
-                <div>
-                    <label class="block text-sm font-medium text-gray-400 mb-2">Formato Saída</label>
-                    <select
-                        id="formatInput"
-                        class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500"
-                    >
-                        <option value="json">JSON</option>
-                        <option value="csv">CSV</option>
-                    </select>
-                </div>
-            </div>
-
+            <!-- Botão Executar -->
             <button
                 id="scrapeBtn"
                 class="w-full py-3 px-4 rounded-lg font-semibold text-white bg-indigo-600 hover:bg-indigo-700 transition-colors"
             >
-                Iniciar Scraping
+                Executar Operação
             </button>
         </div>
 
         <!-- Coluna Direita: Logs e Resultados -->
         <div class="flex flex-col gap-6">
+            <!-- Terminal de Logs -->
             <div class="bg-black p-4 rounded-xl border border-gray-700 shadow-lg flex-grow">
                 <div class="flex justify-between items-center mb-2">
                     <h3 class="text-sm font-semibold text-green-400">Logs do Sistema</h3>
@@ -98,6 +71,7 @@
                 </div>
             </div>
 
+            <!-- Área de Resultados -->
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700 shadow-lg flex-grow">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-xl font-semibold text-gray-100">Resultados</h2>
@@ -118,164 +92,13 @@
         </div>
     </main>
 
-    <script>
-        // Estado e Configurações iniciais
-        const API_BASE_URL = "https://web-scraper-tool-envw.onrender.com";
-        let selectors = [{ key: 'titulo', value: 'h1' }];
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-gray-700 p-4 mt-8">
+        <div class="max-w-7xl mx-auto text-center text-sm text-gray-400">
+            <p>Web Scraper Tool - Interface Web Baseada no Terminal</p>
+        </div>
+    </footer>
 
-        // Elementos da DOM
-        const selectorsContainer = document.getElementById('selectorsContainer');
-        const addSelectorBtn = document.getElementById('addSelectorBtn');
-        const scrapeBtn = document.getElementById('scrapeBtn');
-        const logSection = document.getElementById('logSection');
-        const loadingIndicator = document.getElementById('loadingIndicator');
-        const resultsBox = document.getElementById('resultsBox');
-        const errorBox = document.getElementById('errorBox');
-        const placeholderResults = document.getElementById('placeholderResults');
-        const copyBtn = document.getElementById('copyBtn');
-
-        // Função para renderizar os seletores dinâmicos
-        function renderSelectors() {
-            selectorsContainer.innerHTML = '';
-            selectors.forEach((sel, index) => {
-                const div = document.createElement('div');
-                div.className = 'flex gap-2 fade-in';
-                
-                div.innerHTML = `
-                    <input
-                        type="text"
-                        placeholder="nome_campo"
-                        value="${sel.key}"
-                        class="w-1/3 bg-gray-700 text-white p-2 rounded-lg border border-gray-600 focus:ring-1 focus:ring-indigo-500"
-                        oninput="updateSelector(${index}, 'key', this.value)"
-                    />
-                    <input
-                        type="text"
-                        placeholder=".classe ou #id"
-                        value="${sel.value}"
-                        class="flex-grow bg-gray-700 text-white p-2 rounded-lg border border-gray-600 focus:ring-1 focus:ring-indigo-500"
-                        oninput="updateSelector(${index}, 'value', this.value)"
-                    />
-                    <button 
-                        onclick="removeSelector(${index})"
-                        class="bg-red-600 hover:bg-red-700 text-white px-3 rounded-lg transition-colors"
-                    >X</button>
-                `;
-                selectorsContainer.appendChild(div);
-            });
-        }
-
-        window.updateSelector = (index, field, value) => {
-            selectors[index][field] = value;
-        };
-
-        window.removeSelector = (index) => {
-            selectors.splice(index, 1);
-            renderSelectors();
-        };
-
-        addSelectorBtn.addEventListener('click', () => {
-            selectors.push({ key: '', value: '' });
-            renderSelectors();
-        });
-
-        // Função de Log
-        function addLog(message) {
-            const timestamp = new Date().toLocaleTimeString();
-            const p = document.createElement('div');
-            p.className = 'fade-in';
-            p.textContent = `[${timestamp}] ${message}`;
-            
-            // Limpa mensagem inicial se existir
-            if (logSection.children.length === 1 && logSection.children[0].tagName === 'P') {
-                logSection.innerHTML = '';
-            }
-            
-            logSection.appendChild(p);
-            logSection.scrollTop = logSection.scrollHeight;
-        }
-
-        // Ação de Scraping
-        scrapeBtn.addEventListener('click', async () => {
-            const url = document.getElementById('urlInput').value;
-            const depth = document.getElementById('depthInput').value;
-            const format = document.getElementById('formatInput').value;
-
-            if (!url) {
-                alert('Por favor, insira uma URL.');
-                return;
-            }
-
-            // Resetar UI
-            loadingIndicator.classList.remove('hidden');
-            scrapeBtn.disabled = true;
-            scrapeBtn.classList.add('bg-gray-600', 'cursor-not-allowed');
-            scrapeBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-700');
-            scrapeBtn.innerText = 'Processando...';
-            
-            errorBox.classList.add('hidden');
-            resultsBox.classList.add('hidden');
-            copyBtn.classList.add('hidden');
-            placeholderResults.classList.add('hidden');
-            logSection.innerHTML = '';
-
-            addLog(`Iniciando scraper para: ${url}`);
-            addLog(`Profundidade: ${depth} | Formato: ${format}`);
-
-            const payload = {
-                url: url,
-                selectors: selectors.reduce((acc, curr) => {
-                    if(curr.key && curr.value) acc[curr.key] = curr.value;
-                    return acc;
-                }, {}),
-                depth: parseInt(depth),
-                format: format
-            };
-
-            try {
-                // NOTA: Ajuste a rota '/api/scrape' para a rota real do seu backend
-                addLog(`Enviando requisição para ${API_BASE_URL}/api/scrape...`);
-                const response = await fetch(`${API_BASE_URL}/api/scrape`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-
-                if (!response.ok) {
-                    throw new Error(`Erro HTTP: ${response.status}`);
-                }
-
-                addLog('Requisição bem-sucedida. Processando dados...');
-                const data = await response.json();
-                
-                resultsBox.textContent = JSON.stringify(data, null, 2);
-                resultsBox.classList.remove('hidden');
-                copyBtn.classList.remove('hidden');
-                addLog('Scraping concluído com sucesso!');
-
-            } catch (err) {
-                errorBox.innerHTML = `<strong>Erro:</strong> ${err.message}`;
-                errorBox.classList.remove('hidden');
-                placeholderResults.classList.remove('hidden');
-                addLog(`ERRO: ${err.message}`);
-            } finally {
-                loadingIndicator.classList.add('hidden');
-                scrapeBtn.disabled = false;
-                scrapeBtn.classList.remove('bg-gray-600', 'cursor-not-allowed');
-                scrapeBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-                scrapeBtn.innerText = 'Iniciar Scraping';
-            }
-        });
-
-        // Botão de Copiar
-        copyBtn.addEventListener('click', () => {
-            navigator.clipboard.writeText(resultsBox.textContent);
-            copyBtn.innerText = 'Copiado!';
-            setTimeout(() => copyBtn.innerText = 'Copiar JSON', 2000);
-        });
-
-        // Inicializa a UI
-        renderSelectors();
-    </script>
+    <script src="/static/js/app.js"></script>
 </body>
 </html>
