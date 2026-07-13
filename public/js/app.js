@@ -1,10 +1,9 @@
-// Estado e Configurações iniciais
+// Configurações iniciais
 const API_BASE_URL = window.location.origin;
-let selectors = [{ key: 'titulo', value: 'h1' }];
 
 // Elementos da DOM
-const selectorsContainer = document.getElementById('selectorsContainer');
-const addSelectorBtn = document.getElementById('addSelectorBtn');
+const operationSelect = document.getElementById('operationSelect');
+const dynamicInputs = document.getElementById('dynamicInputs');
 const scrapeBtn = document.getElementById('scrapeBtn');
 const logSection = document.getElementById('logSection');
 const loadingIndicator = document.getElementById('loadingIndicator');
@@ -13,50 +12,84 @@ const errorBox = document.getElementById('errorBox');
 const placeholderResults = document.getElementById('placeholderResults');
 const copyBtn = document.getElementById('copyBtn');
 
-// Função para renderizar os seletores dinâmicos
-function renderSelectors() {
-    selectorsContainer.innerHTML = '';
-    selectors.forEach((sel, index) => {
-        const div = document.createElement('div');
-        div.className = 'flex gap-2 fade-in';
-        
-        div.innerHTML = `
-            <input
-                type="text"
-                placeholder="nome_campo"
-                value="${sel.key}"
-                class="w-1/3 bg-gray-700 text-white p-2 rounded-lg border border-gray-600 focus:ring-1 focus:ring-indigo-500"
-                oninput="updateSelector(${index}, 'key', this.value)"
-            />
-            <input
-                type="text"
-                placeholder=".classe ou #id"
-                value="${sel.value}"
-                class="flex-grow bg-gray-700 text-white p-2 rounded-lg border border-gray-600 focus:ring-1 focus:ring-indigo-500"
-                oninput="updateSelector(${index}, 'value', this.value)"
-            />
-            <button 
-                onclick="removeSelector(${index})"
-                class="bg-red-600 hover:bg-red-700 text-white px-3 rounded-lg transition-colors"
-            >X</button>
-        `;
-        selectorsContainer.appendChild(div);
-    });
+// Mapeamento de operações para endpoints da API
+const API_ENDPOINTS = {
+    hashtag_search: { method: 'GET', path: '/api/search' },
+    web_search: { method: 'GET', path: '/api/search' },
+    text_scrape: { method: 'POST', path: '/api/scrape/text' },
+    links_scrape: { method: 'POST', path: '/api/scrape/links' },
+    images_scrape: { method: 'POST', path: '/api/scrape/images' },
+    video_download: { method: 'POST', path: '/api/video' },
+    list_downloads: { method: 'GET', path: '/api/downloads' }
+};
+
+// Função para renderizar os campos de entrada dinamicamente
+function renderInputs(op) {
+    let html = '';
+    switch(op) {
+        case 'hashtag_search':
+            html = `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Hashtag ou Termo de Busca</label>
+                    <input type="text" id="searchQuery" placeholder="Ex: #tecnologia, python, memes" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                    <p class="text-xs text-gray-500 mt-1">Busca direto na web sem precisar de URL.</p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Número de Resultados</label>
+                    <input type="number" id="searchNum" value="15" min="1" max="50" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                </div>
+            `;
+            break;
+        case 'web_search':
+            html = `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Termo de Pesquisa</label>
+                    <input type="text" id="searchQuery" placeholder="Ex: python tutorial" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Número de Resultados</label>
+                    <input type="number" id="searchNum" value="10" min="1" max="50" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                </div>
+            `;
+            break;
+        case 'text_scrape':
+        case 'links_scrape':
+        case 'images_scrape':
+            html = `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">URL Alvo</label>
+                    <input type="url" id="targetUrl" placeholder="https://exemplo.com" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Seletor CSS (Opcional)</label>
+                    <input type="text" id="cssSelector" placeholder="h1, .classe, #id, a, img" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                    <p class="text-xs text-gray-500 mt-1">Deixe em branco para usar seletores padrão (p, a, img).</p>
+                </div>
+            `;
+            break;
+        case 'video_download':
+            html = `
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">URL do Vídeo</label>
+                    <input type="url" id="videoUrl" placeholder="https://youtube.com/watch?v=..." class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-2">Qualidade</label>
+                    <select id="videoQuality" class="w-full bg-gray-700 text-white p-3 rounded-lg border border-gray-600 focus:ring-2 focus:ring-indigo-500">
+                        <option value="best">Melhor Qualidade (Original)</option>
+                        <option value="720">720p (HD)</option>
+                        <option value="480">480p (SD)</option>
+                        <option value="360">360p (Baixa)</option>
+                    </select>
+                </div>
+            `;
+            break;
+        case 'list_downloads':
+            html = `<p class="text-gray-400 text-sm bg-gray-700 p-3 rounded-lg">Nenhuma entrada necessária. Clique em Executar para listar os arquivos baixados no servidor.</p>`;
+            break;
+    }
+    dynamicInputs.innerHTML = html;
 }
-
-window.updateSelector = (index, field, value) => {
-    selectors[index][field] = value;
-};
-
-window.removeSelector = (index) => {
-    selectors.splice(index, 1);
-    renderSelectors();
-};
-
-addSelectorBtn.addEventListener('click', () => {
-    selectors.push({ key: '', value: '' });
-    renderSelectors();
-});
 
 // Função de Log
 function addLog(message) {
@@ -65,7 +98,6 @@ function addLog(message) {
     p.className = 'fade-in';
     p.textContent = `[${timestamp}] ${message}`;
     
-    // Limpa mensagem inicial se existir
     if (logSection.children.length === 1 && logSection.children[0].tagName === 'P') {
         logSection.innerHTML = '';
     }
@@ -74,16 +106,16 @@ function addLog(message) {
     logSection.scrollTop = logSection.scrollHeight;
 }
 
-// Ação de Scraping
+// Ação principal ao clicar no botão
 scrapeBtn.addEventListener('click', async () => {
-    const url = document.getElementById('urlInput').value;
-    const depth = document.getElementById('depthInput').value;
-    const format = document.getElementById('formatInput').value;
-
-    if (!url) {
-        alert('Por favor, insira uma URL.');
-        return;
-    }
+    const op = operationSelect.value;
+    const config = API_ENDPOINTS[op];
+    
+    let url = `${API_BASE_URL}${config.path}`;
+    let options = {
+        method: config.method,
+        headers: {}
+    };
 
     // Resetar UI
     loadingIndicator.classList.remove('hidden');
@@ -98,39 +130,52 @@ scrapeBtn.addEventListener('click', async () => {
     placeholderResults.classList.add('hidden');
     logSection.innerHTML = '';
 
-    addLog(`Iniciando scraper para: ${url}`);
-    addLog(`Profundidade: ${depth} | Formato: ${format}`);
-
-    const payload = {
-        url: url,
-        selectors: selectors.reduce((acc, curr) => {
-            if(curr.key && curr.value) acc[curr.key] = curr.value;
-            return acc;
-        }, {}),
-        depth: parseInt(depth),
-        format: format
-    };
+    addLog(`Iniciando operação: ${operationSelect.options[operationSelect.selectedIndex].text}`);
 
     try {
-        // Endpoint ajustado para /api/scrape/text
-        addLog(`Enviando requisição para ${API_BASE_URL}/api/scrape/text...`);
-        const response = await fetch(`${API_BASE_URL}/api/scrape/text`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-
-        if (!response.ok) {
-            throw new Error(`Erro HTTP: ${response.status}`);
+        if (op === 'hashtag_search' || op === 'web_search') {
+            const q = document.getElementById('searchQuery').value;
+            const num = document.getElementById('searchNum').value;
+            if (!q) throw new Error("Insira um termo de pesquisa.");
+            url += `?q=${encodeURIComponent(q)}&num=${num}`;
+            addLog(`Pesquisando na web por: ${q}`);
+            
+        } else if (op === 'text_scrape' || op === 'links_scrape' || op === 'images_scrape') {
+            const targetUrl = document.getElementById('targetUrl').value;
+            const selector = document.getElementById('cssSelector').value || "p";
+            if (!targetUrl) throw new Error("Insira uma URL alvo.");
+            
+            options.headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify({ url: targetUrl, selector: selector });
+            addLog(`Scraping URL: ${targetUrl} com seletor: ${selector}`);
+            
+        } else if (op === 'video_download') {
+            const videoUrl = document.getElementById('videoUrl').value;
+            const quality = document.getElementById('videoQuality').value;
+            if (!videoUrl) throw new Error("Insira uma URL de vídeo.");
+            
+            options.headers['Content-Type'] = 'application/json';
+            options.body = JSON.stringify({ url: videoUrl, quality: quality });
+            addLog(`Extraindo link de vídeo: ${videoUrl} (${quality})`);
+            
+        } else if (op === 'list_downloads') {
+            addLog('Listando arquivos no diretório de downloads do servidor...');
         }
 
-        addLog('Requisição bem-sucedida. Processando dados...');
+        addLog(`Enviando requisição ${config.method} para ${config.path}...`);
+        const response = await fetch(url, options);
+
+        if (!response.ok) {
+            const errData = await response.json().catch(() => ({ detail: response.statusText }));
+            throw new Error(`Erro HTTP ${response.status}: ${errData.detail || 'Falha no servidor'}`);
+        }
+
         const data = await response.json();
         
         resultsBox.textContent = JSON.stringify(data, null, 2);
         resultsBox.classList.remove('hidden');
         copyBtn.classList.remove('hidden');
-        addLog('Scraping concluído com sucesso!');
+        addLog('Operação concluída com sucesso!');
 
     } catch (err) {
         errorBox.innerHTML = `<strong>Erro:</strong> ${err.message}`;
@@ -142,7 +187,7 @@ scrapeBtn.addEventListener('click', async () => {
         scrapeBtn.disabled = false;
         scrapeBtn.classList.remove('bg-gray-600', 'cursor-not-allowed');
         scrapeBtn.classList.add('bg-indigo-600', 'hover:bg-indigo-700');
-        scrapeBtn.innerText = 'Iniciar Scraping';
+        scrapeBtn.innerText = 'Executar Operação';
     }
 });
 
@@ -153,5 +198,6 @@ copyBtn.addEventListener('click', () => {
     setTimeout(() => copyBtn.innerText = 'Copiar JSON', 2000);
 });
 
-// Inicializa a UI
-renderSelectors();
+// Inicializa a UI com os campos da primeira opção
+operationSelect.addEventListener('change', (e) => renderInputs(e.target.value));
+renderInputs('hashtag_search');
