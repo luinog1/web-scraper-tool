@@ -2,13 +2,15 @@
 API wrapper para o web-scraper-tool.
 Expõe as funcionalidades da CLI original como endpoints HTTP.
 """
-
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-import os, re, time, requests, subprocess
+import os, re, time, requests, subprocess, json
 from urllib.parse import urlparse, unquote
 from bs4 import BeautifulSoup
+from pathlib import Path
 
 app = FastAPI(
     title="Web Scraper + Video Download API",
@@ -27,8 +29,14 @@ HEADERS = {
     )
 }
 
-# ─── Models ────────────────────────────────────────────────────────────────────
+# ─── Configurar arquivos estáticos ─────────────────────────────────────────────
+# Montar diretório público para servir arquivos estáticos (CSS, JS, imagens)
+app.mount("/static", StaticFiles(directory="public"), name="static")
 
+# Configurar templates Jinja2 (opcional, para HTML dinâmico)
+templates = Jinja2Templates(directory="public")
+
+# ─── Models ────────────────────────────────────────────────────────────────────
 class ScrapeRequest(BaseModel):
     url: str
     selector: str = "p"
@@ -42,7 +50,6 @@ class SearchRequest(BaseModel):
     num: int = 10
 
 # ─── Helpers ───────────────────────────────────────────────────────────────────
-
 def clean_url(url: str) -> str:
     url = url.strip()
     if not url.startswith(("http://", "https://")):
@@ -54,24 +61,22 @@ def fetch_html(url: str) -> str:
     r.raise_for_status()
     return r.text
 
-# ─── Endpoints ─────────────────────────────────────────────────────────────────
-
-@app.get("/")
-def root():
+# ─── Endpoints da API ──────────────────────────────────────────────────────────
+@app.get("/api")
+def api_root():
     return {
         "message": "Web Scraper API is running.",
         "endpoints": [
-            "GET  /search?q=python+tutorial",
-            "POST /scrape/text   - extrai texto por CSS selector",
-            "POST /scrape/links  - extrai links por CSS selector",
-            "POST /scrape/images - extrai imagens por CSS selector",
-            "POST /video         - extrai URL de download de vídeo",
-            "GET  /downloads     - lista ficheiros descarregados",
+            "GET  /api/search?q=python+tutorial",
+            "POST /api/scrape/text   - extrai texto por CSS selector",
+            "POST /api/scrape/links  - extrai links por CSS selector",
+            "POST /api/scrape/images - extrai imagens por CSS selector",
+            "POST /api/video         - extrai URL de download de vídeo",
+            "GET  /api/downloads     - lista ficheiros descarregados",
         ],
     }
 
-
-@app.get("/search")
+@app.get("/api/search")
 def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 10):
     """Pesquisa no DuckDuckGo e devolve os resultados."""
     try:
@@ -92,8 +97,7 @@ def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/scrape/text")
+@app.post("/api/scrape/text")
 def scrape_text(req: ScrapeRequest):
     """Extrai texto de uma página usando um CSS selector."""
     try:
@@ -104,8 +108,7 @@ def scrape_text(req: ScrapeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/scrape/links")
+@app.post("/api/scrape/links")
 def scrape_links(req: ScrapeRequest):
     """Extrai links de uma página usando um CSS selector."""
     try:
@@ -120,8 +123,7 @@ def scrape_links(req: ScrapeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/scrape/images")
+@app.post("/api/scrape/images")
 def scrape_images(req: ScrapeRequest):
     """Extrai imagens de uma página usando um CSS selector."""
     try:
@@ -136,8 +138,7 @@ def scrape_images(req: ScrapeRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.post("/video")
+@app.post("/api/video")
 def get_video_info(req: VideoRequest):
     """
     Extrai a URL de download do vídeo usando yt-dlp (sem descarregar o ficheiro).
@@ -151,7 +152,6 @@ def get_video_info(req: VideoRequest):
         "360": "bestvideo[height<=360]+bestaudio/best[height<=360]",
     }
     fmt = quality_map.get(req.quality, "bestvideo+bestaudio/best")
-
     try:
         cmd = [
             "yt-dlp",
@@ -162,13 +162,11 @@ def get_video_info(req: VideoRequest):
             url,
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-
         if result.returncode != 0:
             # Fallback: tentar obter metadados em JSON
             cmd_json = ["yt-dlp", "--dump-json", "--no-playlist", "--no-warnings", url]
             result_json = subprocess.run(cmd_json, capture_output=True, text=True, timeout=60)
             if result_json.returncode == 0:
-                import json
                 info = json.loads(result_json.stdout)
                 return {
                     "status": "success",
@@ -180,7 +178,6 @@ def get_video_info(req: VideoRequest):
                     "formats_available": len(info.get("formats", [])),
                 }
             raise HTTPException(status_code=400, detail=result.stderr.strip() or "yt-dlp falhou")
-
         download_urls = [u for u in result.stdout.strip().split("\n") if u.startswith("http")]
         return {
             "status": "success",
@@ -193,8 +190,7 @@ def get_video_info(req: VideoRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
-@app.get("/downloads")
+@app.get("/api/downloads")
 def list_downloads():
     """Lista os ficheiros presentes no diretório de downloads do container."""
     try:
@@ -206,3 +202,20 @@ def list_downloads():
         return {"download_dir": DOWNLOAD_DIR, "count": len(files), "files": files}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Servir interface frontend ─────────────────────────────────────────────────
+@app.get("/", response_class=HTMLResponse)
+async def read_root(request: Request):
+    """Serve a interface frontend principal."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/{full_path:path}", response_class=HTMLResponse)
+async def catch_all(request: Request, full_path: str):
+    """Captura todas as outras rotas e serve o index.html (para SPA)."""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+# ─── Health Check ──────────────────────────────────────────────────────────────
+@app.get("/health")
+def health_check():
+    """Endpoint para verificação de saúde do serviço."""
+    return {"status": "healthy", "timestamp": time.time()}
