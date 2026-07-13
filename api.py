@@ -2,15 +2,13 @@
 API wrapper para o web-scraper-tool.
 Expõe as funcionalidades da CLI original como endpoints HTTP.
 """
-from fastapi import FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import JSONResponse, HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 import os, re, time, requests, subprocess, json
 from urllib.parse import urlparse, unquote
 from bs4 import BeautifulSoup
-from pathlib import Path
 
 app = FastAPI(
     title="Web Scraper + Video Download API",
@@ -32,9 +30,6 @@ HEADERS = {
 # ─── Configurar arquivos estáticos ─────────────────────────────────────────────
 # Montar diretório público para servir arquivos estáticos (CSS, JS, imagens)
 app.mount("/static", StaticFiles(directory="public"), name="static")
-
-# Configurar templates Jinja2 (opcional, para HTML dinâmico)
-templates = Jinja2Templates(directory="public")
 
 # ─── Models ────────────────────────────────────────────────────────────────────
 class ScrapeRequest(BaseModel):
@@ -205,14 +200,9 @@ def list_downloads():
 
 # ─── Servir interface frontend ─────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
-async def read_root(request: Request):
+async def read_root():
     """Serve a interface frontend principal."""
-    return templates.TemplateResponse("index.html", {"request": request})
-
-@app.get("/{full_path:path}", response_class=HTMLResponse)
-async def catch_all(request: Request, full_path: str):
-    """Captura todas as outras rotas e serve o index.html (para SPA)."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return FileResponse("public/index.html")
 
 # ─── Health Check ──────────────────────────────────────────────────────────────
 @app.get("/health")
