@@ -15,7 +15,7 @@ from apify_client import ApifyClient
 app = FastAPI(
     title="Web Scraper + Video Download API",
     description="API para scraping web e download de vídeos (Instagram, TikTok, YouTube, Twitter, etc.)",
-    version="2.0.0",
+    version="2.1.0",
 )
 
 # Definir o caminho base absoluto (onde o api.py está localizado)
@@ -68,7 +68,7 @@ def api_root():
         "message": "Web Scraper API is running.",
         "apify_status": "Conectado" if apify_client else "Desconectado (Token do Apify não encontrado)",
         "endpoints": [
-            "GET  /api/search?q=python+tutorial&platform=all",
+            "GET  /api/search?q=python+tutorial&platform=all&sort_by=relevance",
             "POST /api/scrape/text   - extrai texto por CSS selector",
             "POST /api/scrape/links  - extrai links por CSS selector",
             "POST /api/scrape/images - extrai imagens por CSS selector",
@@ -78,22 +78,27 @@ def api_root():
     }
 
 @app.get("/api/search")
-def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 10, platform: str = Query("all", description="Filtrar por rede social")):
+def web_search(
+    q: str = Query(..., description="Termo de pesquisa"), 
+    num: int = 10, 
+    platform: str = Query("all", description="Filtrar por rede social"),
+    sort_by: str = Query("relevance", description="Ordenar por: relevance, views, likes")
+):
     """Pesquisa na web. Usa Apify para TikTok, DDGS/Bing para o resto."""
     results = []
     
     # Se for TikTok e tiver Apify configurado, usa o Apify!
     if platform == "tiktok" and apify_client:
         try:
-            add_log = f"Usando Apify para buscar no TikTok: {q}"
-            print(add_log)
-            
-            # Remove o # se o usuário digitou hashtag
+            print(f"Usando Apify para buscar no TikTok: {q}")
             search_term = q.lstrip('#')
+            
+            # Pedimos um pouco mais de resultados ao Apify para poder ordenar e cortar depois
+            fetch_num = num if sort_by == "relevance" else num * 3
             
             run_input = {
                 "hashtags": [search_term],
-                "resultsPerPage": num,
+                "resultsPerPage": fetch_num,
                 "shouldDownloadCovers": False,
                 "shouldDownloadSlideshowImages": False,
                 "shouldDownloadSubtitles": False,
@@ -102,28 +107,37 @@ def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 
             
             run = apify_client.actor("clockworks/tiktok-scraper").call(run_input=run_input)
             
+            temp_results = []
             for item in apify_client.dataset(run["defaultDatasetId"]).iterate_items():
-                results.append({
+                temp_results.append({
                     "title": item.get("text", "")[:80] + "..." if len(item.get("text", "")) > 80 else item.get("text", ""),
                     "url": item.get("webVideoUrl", ""),
                     "description": item.get("text", ""),
                     "author": item.get("authorMeta", {}).get("name", ""),
-                    "video_url": item.get("videoUrl"), # Link direto do vídeo MP4
+                    "video_url": item.get("videoUrl"),
+                    "views": item.get("playCount", 0),
                     "likes": item.get("diggCount", 0)
                 })
+            
+            # Lógica de Ordenação
+            if sort_by == "views":
+                temp_results.sort(key=lambda x: x.get("views", 0), reverse=True)
+            elif sort_by == "likes":
+                temp_results.sort(key=lambda x: x.get("likes", 0), reverse=True)
                 
+            # Corta para o número exato que o usuário pediu
+            results = temp_results[:num]
+            
             return {"query": q, "platform": "tiktok", "count": len(results), "results": results, "engine": "Apify (TikTok Scraper)"}
             
         except Exception as apify_error:
             print(f"Erro no Apify: {apify_error}. Tentando busca normal...")
-            # Se o Apify falhar, cai para a busca normal do DuckDuckGo
 
     # Busca normal (DuckDuckGo e Bing) para outras plataformas
     search_query = q
     if platform != "all":
         search_query += f" site:{platform}.com"
     
-    # TENTATIVA 1: ddgs (API interna do DuckDuckGo)
     try:
         with DDGS() as ddgs:
             ddgs_results = list(ddgs.text(search_query, max_results=num))
@@ -136,7 +150,6 @@ def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 
     except Exception as ddg_error:
         print(f"ddgs falhou: {ddg_error}. Tentando Bing...")
 
-    # TENTATIVA 2: Bing (Fallback)
     if not results:
         try:
             url = f"https://www.bing.com/search?q={requests.utils.quote(search_query)}&count={num}"
@@ -222,7 +235,7 @@ def get_video_info(req: VideoRequest):
                     "source_url": url,
                     "title": item.get("text", ""),
                     "author": item.get("authorMeta", {}).get("name", ""),
-                    "download_urls": [item.get("videoUrl")] # Link MP4 direto
+                    "download_urls": [item.get("videoUrl")]
                 }
             raise HTTPException(status_code=400, detail="Apify não retornou dados para este link.")
         except Exception as apify_error:
