@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: web-scraper-tool
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: DOWNLOAD_DIR
+        value: /app/downloads
+    healthCheckPath: /
