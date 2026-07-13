@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import os, re, time, requests, subprocess, json
 from urllib.parse import urlparse, unquote
 from bs4 import BeautifulSoup
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 
 app = FastAPI(
     title="Web Scraper + Video Download API",
@@ -77,21 +77,21 @@ def api_root():
 
 @app.get("/api/search")
 def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 10):
-    """Pesquisa na web usando a biblioteca oficial do DuckDuckGo e Bing como fallback."""
+    """Pesquisa na web usando ddgs e Bing como fallback."""
     results = []
     
-    # TENTATIVA 1: duckduckgo_search (API interna, muito mais rápida e sem bloqueio de HTML)
+    # TENTATIVA 1: ddgs (API interna do DuckDuckGo)
     try:
         with DDGS() as ddgs:
             ddgs_results = list(ddgs.text(q, max_results=num))
             for r in ddgs_results:
                 results.append({
                     "title": r.get("title", ""),
-                    "url": r.get("href") or r.get("link", ""),
+                    "url": r.get("href") or r.get("link") or r.get("url", ""),
                     "description": r.get("body") or r.get("snippet", "")
                 })
     except Exception as ddg_error:
-        print(f"duckduckgo_search falhou: {ddg_error}. Tentando Bing...")
+        print(f"ddgs falhou: {ddg_error}. Tentando Bing...")
 
     # TENTATIVA 2: Bing (Fallback)
     if not results:
@@ -100,7 +100,7 @@ def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 
             r = requests.get(url, headers=HEADERS, timeout=10)
             r.raise_for_status()
             soup = BeautifulSoup(r.text, "html.parser")
-            for item in soup.select("li.b_algo")[:num]:
+            for item in soup.select("li.b_algo"):
                 title_el = item.select_one("h2 a")
                 desc_el = item.select_one(".b_caption p")
                 if title_el:
@@ -109,11 +109,12 @@ def web_search(q: str = Query(..., description="Termo de pesquisa"), num: int = 
                         "url": title_el.get("href", ""),
                         "description": desc_el.get_text(strip=True) if desc_el else "",
                     })
+            print(f"Bing retornou {len(results)} resultados.")
         except Exception as bing_error:
-            raise HTTPException(status_code=500, detail=f"Erro no DuckDuckGo e no Bing: {str(bing_error)}")
+            print(f"Erro no Bing: {bing_error}")
 
     if not results:
-        raise HTTPException(status_code=404, detail="Nenhum resultado encontrado. Os motores de busca podem estar bloqueando o servidor.")
+        raise HTTPException(status_code=404, detail="Nenhum resultado encontrado. Tente outro termo.")
 
     return {"query": q, "count": len(results), "results": results}
 
